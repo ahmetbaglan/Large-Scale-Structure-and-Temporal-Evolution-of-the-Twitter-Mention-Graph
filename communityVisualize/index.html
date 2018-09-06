@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+.links line {
+  stroke: #999;
+  stroke-opacity: 0.6;
+}
+
+.nodes circle {
+  stroke: black	;
+  stroke-width: 0px;
+}
+
+</style>
+
+<body>
+
+<select id="inds">
+		<option value="1" selected="selected">January</option>
+		<option value="2">February</option>
+    <option value="3">March</option>
+    <option value="4">April</option>
+    <option value="5">May</option>
+    <option value="6">June</option>
+    <option value="7">July</option>
+    <option value="8">August</option>
+    <option value="9">September</option>
+    <option value="10">October</option>
+    <option value="11">November</option>
+    <option value="12">December</option>
+</select>
+
+<div>
+
+<svg width="1000" height="1000" id = 'sim'></svg>
+<svg width="1000" height="700" id = 'wordcloudWindow'></svg>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+
+<script>
+
+
+var folderAdress= './comGraphData/'
+
+var radScale;
+var color;
+var edgeScale;
+var svg;
+var svgWord;
+var radius;
+var g;
+var link;
+var node;
+var edgepaths;
+var edgelabels;
+var simulation;
+var drag_handler;
+var links_data;
+var nodes_data;
+
+d3.select('#inds')
+    .on("change", function () {
+      var sect = document.getElementById("inds");
+			var section = sect.options[sect.selectedIndex].value;
+      var nodeF = folderAdress+"nodes" + section +".csv"
+      var edgeF = folderAdress+"edges" + section +".csv"
+
+      loadAndShow(nodeF,edgeF)
+          });
+
+
+//create somewhere to put the force directed graph
+
+var rowConverterNode = function(d) {
+          return {
+            size: parseInt(d.size),
+            name: d.name,
+            Image:d.Image,
+          };
+        }
+var rowConverterLink = function(d) {
+          return {
+            type: parseInt(d.type),
+            source: d.source,
+            target:d.target,
+          };
+        }
+
+var loadAndShow = function(nodeFile, edgeFile)
+{
+
+  d3.csv(nodeFile,rowConverterNode,  function(nodesCSV) {
+    d3.csv(edgeFile,rowConverterLink, function(linksCSV){
+
+        node_data_new = [];
+        for (var j = 0; j < nodesCSV.length; j++) {
+
+          var name1 = nodesCSV[j].name;
+          var notFound = true;
+          for (var i = 0; i<nodes_data.length;i++)
+          {
+            var name2 = nodes_data[i].name;
+            if (name1 == name2)
+            {
+              nodes_data[i].size = nodesCSV[j].size
+              nodes_data[i].Image = nodesCSV[j].Image
+              node_data_new.push(nodes_data[i]);
+              notFound = false;
+            }
+          }
+          if(notFound)
+          {
+            nodesCSV[j].x = 0;
+            nodesCSV[j].y = 0;
+            node_data_new.push(nodesCSV[j])
+          }
+
+        }
+        d3.selectAll('circle').remove();
+        d3.selectAll('.links').remove();
+        d3.selectAll('.edgelabel').remove();
+        d3.selectAll('.edgepath').remove();
+        links_data = linksCSV
+        nodes_data = node_data_new
+
+        doIt()
+      });
+  });
+}
+
+
+var doIt= function()
+{
+ simulation.nodes(nodes_data);
+    svgWord.selectAll("*").remove();
+
+    svgWord.append('rect')
+          .attr("id", "wordcloud")
+          .attr("width", width)
+          .attr("height", height)
+          .style("fill", "rgb(255,255,255)");
+
+    svgWord.selectAll(".words")
+       .data(nodes_data)
+       .enter()
+       .append("pattern")
+       .attr("class", "words")
+       .attr("id", function(d){return 'im' + d.name;})
+       .attr("height", "100%")
+       .attr("width", "100%")
+       .attr("patternContentsUnits", "objectBoundingBox")
+       .append("image")
+       .attr("height",500)
+       .attr("widht",500 )
+       .attr("preserveAspectRatio", "none")
+       .attr("xmlns:xlink", "http:www.w3.org/1999/xlink")
+       .attr("xlink:href", function(d){
+         return d.Image;
+       });
+
+
+
+    //draw circles for the nodes
+    var node = d3.select('.nodes');
+
+    //add drag capabilities
+    var drag_handler = d3.drag()
+      .on("start", drag_start)
+      .on("drag", drag_drag)
+      .on("end", drag_end);
+
+    link = g.append("g")
+          .attr("class", "links")
+        .selectAll("line")
+        .data(links_data)
+        .enter().append("line")
+          .attr("stroke-width", function(d){return edgeScale(d.type);});
+
+    //  node.selectAll("circle")
+    // .data(nodes_data)
+    // .attr("r", radius)
+    // .attr("fill", function(d,i){return color(i);})
+    // .call(drag_handler);
+    // console.log(node)
+    //draw circles for the nodes
+    node = g.append("g")
+            .attr("class", "nodes")
+            .selectAll("circle")
+            .data(nodes_data)
+            .enter()
+            .append("circle")
+            .attr("r", radius)
+            .attr("fill", function(d,i){return color(i);})
+            .attr("cx", function(d){return d.x;})
+            .attr("cy", function(d){return d.y;})
+            .call(drag_handler);
+
+
+
+      var edgepaths = svg.selectAll(".edgepath")
+          .data(links_data)
+          .enter()
+          .append('path')
+          .attr('class','edgepath')
+          .attr('fill-opacity',0)
+          .attr('stroke-opacity',0)
+          .attr('id', function(d,i) {return 'edgepath'+i;})
+          .style("pointer-events", "none");
+
+      var edgelabels = svg.selectAll(".edgelabel")
+                  .data(links_data)
+                  .enter()
+                  .append('text')
+                  .style("pointer-events", "none")
+                  .attr('class','edgelabel')
+                  .attr('id',function(d,i){return 'edgelabel'+i})
+                  .attr('font-size',13)
+                  .attr('fill', 'rgb(100,100,100)');
+
+      edgelabels.append('textPath')
+          .attr('xlink:href', function (d, i) {return '#edgepath' + i})
+          .style("text-anchor", "middle")
+          .style("pointer-events", "none")
+          .attr("startOffset", "50%")
+          .text(function (d) {return d.type});
+
+
+
+    var link_force =  d3.forceLink(links_data)
+                            .id(function(d) { return d.name; })
+                            .distance(400).strength(1);
+
+    var charge_force = d3.forceManyBody()
+        .strength(-10);
+
+    var center_force = d3.forceCenter(width / 2, height /2 );
+
+    simulation
+        .force("charge_force", charge_force)
+        .force("center_force", center_force)
+        .force("links",link_force);
+
+
+    //add tick instructions:
+    simulation.on("tick", tickActions );
+    simulation.alphaTarget(0.5).restart();
+
+    //Drag functions
+    //d is the node
+    function drag_start(d) {
+
+     if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    //make sure you can't drag the circle outside the box
+    function drag_drag(d) {
+      d.fx = d3.event.x;
+      d.fy = d3.event.y;
+    }
+
+    function drag_end(d) {
+      if (!d3.event.active) simulation.alphaTarget(0);
+      // d.fx = null;
+      // d.fy = null;
+
+      var nowColor = d3.select(this).style("fill");
+
+      d3.select(this).transition()
+          .style("fill", "black")
+          .attr("r", radScale(d.size * 1.5))
+        .transition()
+          .attr("r", radScale(d.size))
+          .style("fill", nowColor);
+
+    imId = "url(#im" + d.name+")";
+
+    d3.select('#wordcloud')
+      .style("fill", imId);
+    }
+
+    function tickActions() {
+       node = d3.selectAll('circle');
+      //  console.log(node)
+
+        // update circle positions each tick of the simulation
+           node
+            .attr("cx", function(d) {  return d.x; })
+            .attr("cy", function(d) { return d.y; });
+
+        //update link positions
+        link
+            .attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+        edgepaths.attr('d', function (d) {
+             return 'M ' + d.source.x + ' ' + d.source.y + ' L ' + d.target.x + ' ' + d.target.y;
+         });
+       edgelabels.attr('transform', function (d) {
+                if (d.target.x < d.source.x) {
+                    var bbox = this.getBBox();
+
+                    rx = bbox.x + bbox.width / 2;
+                    ry = bbox.y + bbox.height / 2;
+                    return 'rotate(180 ' + rx + ' ' + ry + ')';
+                }
+                else {
+                    return 'rotate(0)';
+                }
+            });
+    }
+
+}
+
+d3.csv(folderAdress+ "nodes1.csv",rowConverterNode,  function(nodesCSV) {
+  d3.csv(folderAdress+"edges1.csv",rowConverterLink, function(linksCSV){
+      // dataset = data;
+      nodes_data = nodesCSV;
+      links_data = linksCSV;
+
+      doItStart()
+    });
+});
+
+
+
+var doItStart = function()
+{
+    radScale = d3.scaleSqrt().domain([d3.min(nodes_data, function(d){return d.size;}), d3.max(nodes_data,function(d){return d.size;})]).range([10, 70]);
+    color = d3.scaleOrdinal(d3.schemeCategory10);
+    edgeScale = d3.scaleLinear()
+                      .domain([d3.min(links_data, function(d){return d.type}),d3.max(links_data,function(d){return d.type})])
+                      .range([2,10]);
+
+
+    svg = d3.select("#sim"),
+        width = +svg.attr("width"),
+        height = +svg.attr("height");
+
+    svgWord = d3.select("#wordcloudWindow");
+
+
+    svgWord.selectAll("*").remove();
+
+    svgWord.append('rect')
+          .attr("id", "wordcloud")
+          .attr("width", width)
+          .attr("height", height)
+          .style("fill", "rgb(255,255,255)");
+
+    svgWord.selectAll(".words")
+       .data(nodes_data)
+       .enter()
+       .append("pattern")
+       .attr("class", "words")
+       .attr("id", function(d){return 'im' + d.name;})
+       .attr("height", "100%")
+       .attr("width", "100%")
+       .attr("patternContentsUnits", "objectBoundingBox")
+       .append("image")
+       .attr("height",500)
+       .attr("widht",500 )
+       .attr("preserveAspectRatio", "none")
+       .attr("xmlns:xlink", "http:www.w3.org/1999/xlink")
+       .attr("xlink:href", function(d){
+         return d.Image;
+       });
+    radius = function(d){return radScale(d.size);};
+
+
+    //add encompassing group for the zoom
+    g = svg.append("g")
+        .attr("class", "everything");
+
+    //draw lines for the links
+    link = g.append("g")
+          .attr("class", "links")
+        .selectAll("line")
+        .data(links_data)
+        .enter().append("line")
+          .attr("stroke-width", function(d){return edgeScale(d.type);});
+
+
+
+    //draw circles for the nodes
+    node = g.append("g")
+            .attr("class", "nodes")
+            .selectAll("circle")
+            .data(nodes_data)
+            .enter()
+            .append("circle")
+            .attr("r", radius)
+            .attr("fill", function(d,i){return color(i);});
+
+
+    edgepaths = svg.selectAll(".edgepath")
+          .data(links_data)
+          .enter()
+          .append('path')
+          .attr('class','edgepath')
+          .attr('fill-opacity',0)
+          .attr('stroke-opacity',0)
+          .attr('id', function(d,i) {return 'edgepath'+i;})
+          .style("pointer-events", "none");
+
+    edgelabels = svg.selectAll(".edgelabel")
+                  .data(links_data)
+                  .enter()
+                  .append('text')
+                  .style("pointer-events", "none")
+                  .attr('class','edgelabel')
+                  .attr('id',function(d,i){return 'edgelabel'+i})
+                  .attr('font-size',13)
+                  .attr('fill', 'rgb(100,100,100)');
+
+      edgelabels.append('textPath')
+          .attr('xlink:href', function (d, i) {return '#edgepath' + i})
+          .style("text-anchor", "middle")
+          .style("pointer-events", "none")
+          .attr("startOffset", "50%")
+          .text(function (d) {return d.type});
+
+
+
+
+
+
+    //set up the simulation and add forces
+    simulation = d3.forceSimulation()
+    					.nodes(nodes_data);
+
+    var link_force =  d3.forceLink(links_data)
+                            .id(function(d) { return d.name; })
+                            .distance(400).strength(1);
+
+    var charge_force = d3.forceManyBody()
+        .strength(-10);
+
+    var center_force = d3.forceCenter(width / 2, height /2 );
+
+    simulation
+        .force("charge_force", charge_force)
+        .force("center_force", center_force)
+        .force("links",link_force)
+     ;
+
+
+    //add tick instructions:
+    simulation.on("tick", tickActions );
+
+
+
+
+
+    //add drag capabilities
+    drag_handler = d3.drag()
+    	.on("start", drag_start)
+    	.on("drag", drag_drag)
+    	.on("end", drag_end);
+
+    drag_handler(node);
+
+
+
+    //Drag functions
+    //d is the node
+    function drag_start(d) {
+     if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    //make sure you can't drag the circle outside the box
+    function drag_drag(d) {
+      d.fx = d3.event.x;
+      d.fy = d3.event.y;
+    }
+
+    function drag_end(d) {
+      if (!d3.event.active) simulation.alphaTarget(0);
+      // d.fx = null;
+      // d.fy = null;
+
+      var nowColor = d3.select(this).style("fill");
+
+      d3.select(this).transition()
+          .style("fill", "black")
+          .attr("r", radScale(d.size * 1.5))
+        .transition()
+          .attr("r", radScale(d.size))
+          .style("fill", nowColor);
+
+    imId = "url(#im" + d.name+")";
+
+    d3.select('#wordcloud')
+      .style("fill", imId);
+    }
+
+    function tickActions() {
+
+        //update circle positions each tick of the simulation
+           node
+           .attr("cx", function(d) { return d.x; })
+            .attr("cy", function(d) { return d.y; });
+
+        //update link positions
+        link
+            .attr("x1", function(d) { return d.source.x; })
+            .attr("y1", function(d) { return d.source.y; })
+            .attr("x2", function(d) { return d.target.x; })
+            .attr("y2", function(d) { return d.target.y; });
+
+          edgepaths.attr('d', function (d) {
+             return 'M ' + d.source.x + ' ' + d.source.y + ' L ' + d.target.x + ' ' + d.target.y;
+         });
+         edgelabels.attr('transform', function (d) {
+                if (d.target.x < d.source.x) {
+                    var bbox = this.getBBox();
+
+                    rx = bbox.x + bbox.width / 2;
+                    ry = bbox.y + bbox.height / 2;
+                    return 'rotate(180 ' + rx + ' ' + ry + ')';
+                }
+                else {
+                    return 'rotate(0)';
+                }
+            });
+    }
+
+}
+
+</script>
+
+</div>
+
+</body>
